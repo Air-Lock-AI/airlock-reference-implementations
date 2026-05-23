@@ -1,0 +1,42 @@
+{
+  "name": "airlock-agentcore-reference",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference implementation: deploy an Airlock-authored agent to Amazon Bedrock AgentCore Runtime (Node.js).",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Air-Lock-AI/airlock-agentcore-reference.git"
+  },
+  "homepage": "https://github.com/Air-Lock-AI/airlock-agentcore-reference",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "bundle": "node --experimental-strip-types scripts/bundle.ts",
+    "export-agent": "node --experimental-strip-types scripts/export-agent.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "cdk": "cdk --app \"node --experimental-strip-types infrastructure/bin/app.ts\"",
+    "deploy": "npm run bundle && npm run cdk -- deploy",
+    "synth": "npm run cdk -- synth",
+    "destroy": "npm run cdk -- destroy"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@aws-sdk/client-secrets-manager": "^3.1053.0",
+    "bedrock-agentcore": "^0.2.4",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.1053.0",
+    "@types/node": "^22.10.0",
+    "aws-cdk": "^2.1029.0",
+    "aws-cdk-lib": "^2.257.0",
+    "constructs": "^10.4.2",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,67 @@
+name: Deploy AgentCore reference
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Deployment stage / AWS account alias'
+        required: true
+        default: 'dev'
+      pattern:
+        description: 'Which entrypoint to deploy'
+        required: true
+        type: choice
+        default: runtime-fetch
+        options:
+          - runtime-fetch       # uses src/index.ts; agent loaded from Airlock at cold start
+          - build-time-export   # uses src/build-time-export.ts; agent baked into bundle
+
+permissions:
+  id-token: write   # OIDC role assumption
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.stage }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AIRLOCK_ORG_SLUG: ${{ vars.AIRLOCK_ORG_SLUG }}
+      AIRLOCK_AGENT_NAME: ${{ vars.AIRLOCK_AGENT_NAME }}
+      AIRLOCK_API_BASE_URL: ${{ vars.AIRLOCK_API_BASE_URL }}
+      AIRLOCK_TOKEN_SECRET_ARN: ${{ vars.AIRLOCK_TOKEN_SECRET_ARN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Build-time pattern only: export the agent from Airlock and bake it in.
+      - name: Export agent (build-time pattern)
+        if: ${{ inputs.pattern == 'build-time-export' }}
+        env:
+          AIRLOCK_SERVICE_TOKEN: ${{ secrets.AIRLOCK_SERVICE_TOKEN }}
+        run: npm run export-agent
+
+      - name: Bundle
+        run: npm run bundle
+
+      - name: CDK synth
+        env:
+          AGENT_ENTRYPOINT: ${{ inputs.pattern == 'build-time-export' && 'build-time-export.js' || 'index.js' }}
+        run: npm run synth
+
+      - name: CDK deploy
+        env:
+          AGENT_ENTRYPOINT: ${{ inputs.pattern == 'build-time-export' && 'build-time-export.js' || 'index.js' }}
+        run: npm run cdk -- deploy --require-approval never
