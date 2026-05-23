@@ -20,6 +20,10 @@ permissions:
   id-token: write   # OIDC role assumption
   contents: read
 
+defaults:
+  run:
+    working-directory: agentcore
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -37,6 +41,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: agentcore/package-lock.json
 
       - run: npm ci
 

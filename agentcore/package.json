@@ -1,5 +1,5 @@
 {
-  "name": "airlock-agentcore-reference",
+  "name": "airlock-reference-implementations-agentcore",
   "version": "0.1.0",
   "private": true,
   "description": "Reference implementation: deploy an Airlock-authored agent to Amazon Bedrock AgentCore Runtime (Node.js).",
@@ -7,9 +7,10 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Air-Lock-AI/airlock-agentcore-reference.git"
+    "url": "git+https://github.com/Air-Lock-AI/airlock-reference-implementations.git",
+    "directory": "agentcore"
   },
-  "homepage": "https://github.com/Air-Lock-AI/airlock-agentcore-reference",
+  "homepage": "https://github.com/Air-Lock-AI/airlock-reference-implementations/tree/main/agentcore",
   "engines": {
     "node": ">=22"
   },

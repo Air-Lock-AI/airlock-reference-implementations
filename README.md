@@ -1,235 +1,131 @@
-# airlock-agentcore-reference
+# airlock-reference-implementations
 
-Reference implementation: deploy an [Airlock](https://air-lock.ai)-authored agent to **Amazon Bedrock AgentCore Runtime** on Node.js.
+Deployable reference implementations of [Airlock](https://air-lock.ai)-authored agents running on customer-owned hosts. Companion to **[RFC-011 — Portable Agents](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md)**.
 
-This repo is the canonical example for [RFC-011 — Portable Agents](https://linear.app/air-lock/issue/AIR-359). It shows how to take an agent defined in the Airlock Control Room, render it through the `claude-sdk` adapter, and run it on a host you own — with every tool call still flowing through Airlock's governance plane (policy, approval, audit, budgets).
+Each subdirectory is a self-contained, deploy-ready repo for one host runtime. They all share the same three load-bearing ideas; the rest is host glue.
 
-> **Status:** v0.1. Tracking ticket: [AIR-374](https://linear.app/air-lock/issue/AIR-374). Tested against `bedrock-agentcore@^0.2.4` and `@anthropic-ai/claude-agent-sdk@^0.3.150`.
+| Host | Subdir | Status | Language | Infra | Tracking |
+|---|---|---|---|---|---|
+| **Amazon Bedrock AgentCore Runtime** | [`agentcore/`](./agentcore) | v0.1 | TypeScript / Node 22 | AWS CDK | [AIR-374](https://linear.app/air-lock/issue/AIR-374) |
+| AWS Lambda + Function URL | `lambda/` | planned | TypeScript / Node 22 | AWS CDK | — |
+| Google Vertex AI Agent Engine | `vertex-ae/` | planned | Python | GCP CDK / Terraform | — |
+| Google Cloud Run | `cloud-run/` | planned | Python | Terraform | — |
 
 ---
 
-## What you get vs. what you own
+## The three load-bearing ideas
+
+Every reference implementation does the same three things. If you're writing one for a host that isn't listed yet, copy these from the closest sibling and change only the bits that are actually host-specific.
+
+### 1. Render the agent through the right adapter
+
+Airlock stores an agent as a portable `AgentSpec` ([RFC-011 §5.1](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md#51-data-model)). Before the host can run it, Airlock renders it into the host's native shape via an *adapter*:
+
+| Host | Adapter | Output shape |
+|---|---|---|
+| AgentCore (Node) | `claude-sdk` | `{ agentName, agentDefinition, mcpServers, skills, airlock }` |
+| Lambda (Node) | `claude-sdk` | same |
+| Vertex AE (Py) | `gemini` | Vertex `GenerativeModel` + function-calling config |
+| Cloud Run (Py) | `vercel` or `openai` | depends on which Python loop driver you pick |
+
+Get the rendered output via either:
+- **Runtime**: `GET https://api.air-lock.ai/v1/orgs/{slug}/agents/{name}/export?adapter={adapter}`
+- **MCP tool**: `export_agent` (org-wide MCP endpoint)
+
+Either way, the adapter returns a JSON object the host SDK can consume directly. **No string parsing.** The `content` field of the artifact is structured data on purpose ([adapter contract](https://github.com/Air-Lock-AI/airlock/blob/main/packages/agent-adapters/contract.ts)).
+
+### 2. Wire the per-invocation `agentInvocationId`
+
+The adapter bakes two placeholders into the MCP-server config it hands you:
+
+```
+Authorization:                Bearer ${AIRLOCK_TOKEN}
+X-Airlock-Agent-Invocation-Id: ${AIRLOCK_AGENT_INVOCATION_ID}
+```
+
+Substitute these **at invocation time**, never at build time:
+
+- `${AIRLOCK_TOKEN}` — your service token. One per process is fine.
+- `${AIRLOCK_AGENT_INVOCATION_ID}` — a fresh UUID **per invocation** of the agent loop.
+
+Every MCP tool call the agent makes within one loop carries the same invocation id. That's what makes "this run of the agent" a queryable concept in the Airlock audit log — without it you have N independent tool-call rows and no way to ask "what did the agent do for that one user request?" This is the single most important contract — get it wrong and your audit log becomes useless.
+
+### 3. Don't re-implement tool execution
+
+The host runs the LLM loop. **Airlock runs the tools.** Every tool call goes through `https://mcp.air-lock.ai/org/{slug}` (the URL the adapter writes into the MCP-server config). That's where the policy engine, the approval workflow, the budget check, and the audit log all run.
+
+You never instantiate a tool client in the host code. You never replay a tool call. You never cache a tool result. If you find yourself reaching for any of those, you're rebuilding what Airlock is for.
+
+---
+
+## What you own vs. what Airlock owns
+
+This is true for every host — only the noun "AgentCore Runtime" changes per row.
 
 | Airlock owns | You own |
 |---|---|
-| Agent definition (system prompt, model preference, tool allowlist, skills, budget, approval mode) | This repo — deployment glue + IAM + observability |
-| Tool catalog + policy engine + approval workflow | The AWS account hosting the AgentCore Runtime |
+| Agent definition (system prompt, model preference, tool allowlist, skills, budget, approval mode) | The reference impl in this repo — deployment glue + IAM + observability |
+| Tool catalog + policy engine + approval workflow | The cloud account hosting the runtime |
 | Audit log + `agentInvocationId` correlation | The service-token rotation + storage |
-| Budget enforcement | The model-access entitlement in Bedrock |
-| Per-invocation MCP authentication | The CDK stack, the bundling, the redeploy schedule |
+| Budget enforcement | The model-access entitlement on your cloud |
+| Per-invocation MCP authentication | The infra-as-code, the bundling, the redeploy schedule |
 
-Concretely: the agent definition lives in `https://control-room.air-lock.ai/<your-org>/agents/<name>`. Every tool call the agent makes goes back through `https://mcp.air-lock.ai/org/<your-org>`. This repo is the loop driver — not the policy engine.
-
-See [RFC-011 §6.4 — portability bounds](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md#64-same-agent-a-third-host-nobody-anticipated--and-what-limits-portable) for what AgentCore can and cannot express vs. the canonical `AgentSpec`.
+See [RFC-011 §6.4 — portability bounds](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md#64-same-agent-a-third-host-nobody-anticipated--and-what-limits-portable) for what each host can and can't express vs. the canonical `AgentSpec`.
 
 ---
 
-## Two patterns, pick one
+## Two deployment patterns (every host gets both)
 
-This repo ships both. Each is a separate entrypoint; the CDK stack picks one via `AGENT_ENTRYPOINT`.
+Each subdir ships both. Pick one per environment — same code path, different staging.
 
-### Pattern A — Runtime fetch (default, `src/index.ts`)
+### Pattern A — Runtime fetch (default)
 
-On cold start, the runtime calls Airlock's REST `export_agent?adapter=claude-sdk` and caches the rendered config in module scope for the rest of the worker's life. Every invocation reuses the cached config; substitution of `${AIRLOCK_TOKEN}` and `${AIRLOCK_AGENT_INVOCATION_ID}` happens per call.
+The deployed runtime calls Airlock's REST `export_agent` on cold start, caches the rendered config in module scope, and substitutes placeholders per invocation.
 
-- **Pro:** edits to the agent in the Control Room reach the deployed runtime within one cold-start cycle. No redeploy.
-- **Con:** cold start depends on Airlock being reachable. If Airlock's REST API is down when your runtime cycles workers, new invocations fail fast (loud, visible in CloudWatch) rather than serving stale state. This is intentional — silent staleness is worse than visible outage.
+- **Pro:** Control-Room edits to the agent reach the deployed runtime within one cold-start cycle. No redeploy.
+- **Con:** Cold start depends on Airlock being reachable. Failures are loud (visible in cloud logs) rather than silently serving stale state — by design.
 
-This is the right default for almost everyone.
+### Pattern B — Build-time export
 
-### Pattern B — Build-time export (`src/build-time-export.ts`)
+CI calls `export_agent` before bundling, writes the rendered config to a generated file, and bakes it into the deployment artifact. The runtime never touches Airlock's REST API.
 
-The CI workflow runs `npm run export-agent` before bundling, writing the rendered config to `src/generated/agent.json`. That JSON gets baked into the deployment zip. The deployed runtime never talks to Airlock except via the MCP endpoint (which it does need at invocation time, for the actual tool calls).
+- **Pro:** No cold-start dependency on Airlock. Air-gappable. Deterministic.
+- **Con:** Every Control-Room agent edit requires a redeploy.
 
-- **Pro:** no cold-start dependency on Airlock's REST API. Air-gappable. Deterministic — same deploy, same agent.
-- **Con:** every Control-Room edit to the agent spec requires a redeploy to take effect.
-
-Right answer when: you have strict deploy-determinism requirements, run in an isolated VPC, or your compliance posture forbids fetching config from outside the deployment artifact.
-
-The exported JSON **does not contain secrets.** The `${AIRLOCK_TOKEN}` and `${AIRLOCK_AGENT_INVOCATION_ID}` placeholders the adapter bakes in are still placeholders on disk — they're substituted at invocation time, the same way as Pattern A.
+The exported JSON **never contains secrets** — the `${AIRLOCK_TOKEN}` and `${AIRLOCK_AGENT_INVOCATION_ID}` placeholders the adapter emits stay as placeholders on disk under both patterns. They're substituted at invocation time, always.
 
 ---
 
-## Prerequisites
+## Picking a starting point
 
-- An Airlock organization with at least one agent. The walkthrough below uses the `triage` agent from RFC-011 §6.1 — you can either create it (paste the spec from the RFC into the Control Room agent editor) or substitute any agent name you already have.
-- AWS account with:
-  - Bedrock model access enabled for Anthropic Claude Sonnet 4 (the model `triage` resolves to via `claude-sdk/models.ts`). Console: Bedrock → Model access → enable `anthropic.claude-sonnet-4-*`.
-  - AgentCore Runtime available in your target region (`us-west-2`, `us-east-1`, `eu-central-1`, plus newer regions — check the [AWS What's New page](https://aws.amazon.com/about-aws/whats-new/2026/04/amazon-bedrock-agentcore-runtime/)).
-  - Permissions to create IAM roles, Secrets Manager entries, and Bedrock AgentCore Runtimes.
-- **Node.js 22+** locally. AgentCore Runtime CodeZip only supports `NODE_22` today.
-- AWS CDK bootstrapped in your target account: `npx cdk bootstrap aws://<account>/<region>`.
+| You want to… | Start with |
+|---|---|
+| Deploy an Airlock agent on AWS, Node.js, dedicated runtime | [`agentcore/`](./agentcore) |
+| Build a reference impl for a host that's not listed yet | Copy the closest sibling, change only host-specific bits. PRs welcome. |
+| Understand the contract without deploying anything | Read this README, then [RFC-011](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md). |
 
 ---
 
-## Setup walkthrough
+## Contributing a new host
 
-### 1. Clone + install
+Adding a host (e.g. `lambda/`, `vertex-ae/`) means writing one more reference impl that:
 
-```bash
-git clone https://github.com/Air-Lock-AI/airlock-agentcore-reference.git
-cd airlock-agentcore-reference
-npm install
-```
+1. Calls `export_agent` with the right adapter for its language/SDK
+2. Substitutes the two placeholders per invocation
+3. Drives the LLM loop with the host SDK, pointing tools at the Airlock MCP endpoint
+4. Ships a deploy-ready infra-as-code stack and a README that walks a new user end-to-end
 
-### 2. Create an Airlock service token
-
-In the Control Room: **Settings → Service Accounts → New service account**. Give it the toolset assignment that matches the agent you're deploying (otherwise the agent's allowed tools won't be visible to the loop). Copy the token — it starts with `svct_` and is shown once.
-
-### 3. Store the token in AWS Secrets Manager
-
-```bash
-aws secretsmanager create-secret \
-  --name airlock/agentcore-reference/service-token \
-  --secret-string "svct_..." \
-  --region us-west-2
-```
-
-Copy the returned `ARN` — you'll put it in `.env` next.
-
-### 4. Configure env
-
-```bash
-cp .env.example .env
-# Edit .env: set AIRLOCK_ORG_SLUG, AIRLOCK_AGENT_NAME, AIRLOCK_TOKEN_SECRET_ARN, AWS_REGION.
-```
-
-If you want to use Pattern B (build-time export), also set `AIRLOCK_SERVICE_TOKEN` in `.env` — but only locally. **Never commit that value.**
-
-### 5. Bundle + deploy
-
-```bash
-# Bundle src/index.ts and src/build-time-export.ts to dist/ via esbuild
-npm run bundle
-
-# Synth to inspect what will be created
-npm run synth
-
-# Deploy
-npm run deploy
-```
-
-If you want Pattern B:
-
-```bash
-npm run export-agent   # writes src/generated/agent.json
-npm run bundle
-AGENT_ENTRYPOINT=build-time-export.js npm run deploy
-```
-
-The stack output prints `AgentRuntimeArn` — copy it.
-
-### 6. Invoke the agent
-
-```bash
-cat > invoke.ts <<'EOF'
-import {
-  BedrockAgentCoreClient,
-  InvokeAgentRuntimeCommand,
-} from '@aws-sdk/client-bedrock-agentcore';
-import { randomUUID } from 'node:crypto';
-
-const arn = process.env.AGENT_RUNTIME_ARN!;
-const client = new BedrockAgentCoreClient({ region: 'us-west-2' });
-const command = new InvokeAgentRuntimeCommand({
-  agentRuntimeArn: arn,
-  runtimeSessionId: randomUUID(),
-  payload: JSON.stringify({ prompt: 'Triage issue #1294 — look at the title and labels and suggest a route.' }),
-  contentType: 'application/json',
-  qualifier: 'DEFAULT',
-});
-const response = await client.send(command);
-console.log(await response.response?.transformToString());
-EOF
-
-AGENT_RUNTIME_ARN=<arn from step 5> npx tsx invoke.ts
-```
-
-You should see SSE events stream back — `invocation_started`, `tool_use`, `message`, and a final `result`.
-
-### 7. Watch the audit log
-
-In the Control Room: **Logs → AuditLog**. Filter by your service-account ID. You'll see one row per tool call, all sharing the same `agentInvocationId` — that's the UUID we generated in `src/index.ts` and put in the `X-Airlock-Agent-Invocation-Id` header on every MCP call. This is the load-bearing piece — it's what makes "this run of the agent" a queryable concept across tool calls.
-
-If the correlation id is missing, the agent isn't reaching Airlock's MCP endpoint correctly — usually because of a typo in the toolset assignment or because the service token has been rotated. Check CloudWatch logs at `/aws/bedrock-agentcore/runtimes/<runtime-id>-DEFAULT`.
-
----
-
-## Local development
-
-`agentcore dev` from the [AgentCore CLI](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-cli-typescript.html) runs the runtime locally on `http://localhost:8080`. Configure it to bundle `dist/index.js` (or `dist/build-time-export.js`) as the entrypoint after `npm run bundle`.
-
-For quick smoke tests:
-
-```bash
-AIRLOCK_ORG_SLUG=acme \
-AIRLOCK_AGENT_NAME=triage \
-AIRLOCK_SERVICE_TOKEN=svct_... \
-node --experimental-strip-types src/index.ts &
-curl -X POST http://localhost:8080/invocations \
-  -H 'Content-Type: application/json' \
-  -d '{"prompt":"hello"}'
-```
-
----
-
-## Repo layout
-
-```
-.
-├── README.md                       ← you are here
-├── package.json
-├── tsconfig.json
-├── src/
-│   ├── index.ts                    ← Pattern A entrypoint (runtime fetch)
-│   ├── build-time-export.ts        ← Pattern B entrypoint (baked in)
-│   ├── generated/                  ← gitignored; produced by `npm run export-agent`
-│   └── lib/
-│       ├── types.ts                ← claude-sdk adapter shape
-│       ├── airlock-client.ts       ← REST export_agent fetch
-│       ├── render-config.ts        ← placeholder substitution
-│       ├── service-token.ts        ← Secrets Manager / env-var resolution
-│       └── run-agent.ts            ← Claude Agent SDK driver
-├── scripts/
-│   ├── bundle.ts                   ← esbuild → dist/
-│   └── export-agent.ts             ← writes src/generated/agent.json
-├── infrastructure/
-│   ├── cdk.json
-│   ├── bin/app.ts                  ← CDK app entry
-│   └── agentcore-stack.ts          ← AgentCore Runtime + IAM
-├── tests/
-│   ├── render-config.test.ts
-│   └── airlock-client.test.ts
-└── .github/workflows/deploy.yml    ← example CI deploy
-```
+When in doubt, mirror the structure of [`agentcore/`](./agentcore). Open a PR; we'll link it from the table above.
 
 ---
 
 ## Reference & further reading
 
 - Notion: [V1 MVP — agent portability](https://www.notion.so/28eb59c8985d839a999a81a33a9fcf95) (`Air-Lock-AI` workspace)
-- Notion: [V2 backlog — agent portability](https://www.notion.so/364b59c8985d81f7b526c9a00a1945b8)
-- [RFC-011 — Portable agents](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md), especially:
-  - §5.1 — `AgentEnvelope` / `AgentSpec` shape
-  - §5.3 — adapter runtime contract
-  - §5.7 — `agentInvocationId` correlation
-  - §6.1 — `triage` worked example
-  - **§6.4 — portability bounds** (what AgentCore can and can't express)
-- [AWS Bedrock AgentCore Runtime — TypeScript getting started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-cli-typescript.html)
-- [`bedrock-agentcore` SDK](https://github.com/aws/bedrock-agentcore-sdk-typescript)
-- [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)
-
----
-
-## Sibling repos (planned)
-
-This is the first reference implementation. The same pattern — *export the agent through a vendor adapter, run it on a host you own* — works for any MCP-speaking runtime. Planned siblings:
-
-- `airlock-vertex-ae-reference` (Vertex AI Agent Engine, Python)
-- `airlock-lambda-reference` (AWS Lambda + Function URL, Node.js)
-- `airlock-cloud-run-reference` (Google Cloud Run, Python)
-
-If you build one against another runtime, open an issue or PR — we'll link it from here.
+- Notion: [V2 backlog](https://www.notion.so/364b59c8985d81f7b526c9a00a1945b8)
+- [RFC-011 — Portable agents](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md)
+- [Airlock adapter source](https://github.com/Air-Lock-AI/airlock/tree/main/packages/agent-adapters)
+- [Airlock Control Room](https://control-room.air-lock.ai)
 
 ---
 
