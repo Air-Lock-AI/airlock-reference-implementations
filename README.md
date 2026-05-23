@@ -4,12 +4,12 @@ Deployable reference implementations of [Airlock](https://air-lock.ai)-authored 
 
 Each subdirectory is a self-contained, deploy-ready repo for one host runtime. They all share the same three load-bearing ideas; the rest is host glue.
 
-| Host | Subdir | Status | Language | Infra | Tracking |
-|---|---|---|---|---|---|
-| **Amazon Bedrock AgentCore Runtime** | [`agentcore/`](./agentcore) | v0.1 | TypeScript / Node 22 | AWS CDK | [AIR-374](https://linear.app/air-lock/issue/AIR-374) |
-| AWS Lambda + Function URL | `lambda/` | planned | TypeScript / Node 22 | AWS CDK | — |
-| Google Vertex AI Agent Engine | `vertex-ae/` | planned | Python | GCP CDK / Terraform | — |
-| Google Cloud Run | `cloud-run/` | planned | Python | Terraform | — |
+| Host | Subdir | Status | Language | Infra |
+|---|---|---|---|---|
+| **Amazon Bedrock AgentCore Runtime** | [`agentcore/`](./agentcore) | v0.1 | TypeScript / Node 22 | AWS CDK |
+| AWS Lambda + Function URL | `lambda/` | planned | TypeScript / Node 22 | AWS CDK |
+| Google Vertex AI Agent Engine | `vertex-ae/` | planned | Python | GCP CDK / Terraform |
+| Google Cloud Run | `cloud-run/` | planned | Python | Terraform |
 
 ---
 

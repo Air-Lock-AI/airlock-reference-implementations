@@ -2,7 +2,7 @@
 
 Reference deployment of an Airlock agent to **Amazon Bedrock AgentCore Runtime** on Node.js. One of several hosts under [`airlock-reference-implementations`](../README.md) — read the umbrella README first if you haven't.
 
-> **Status:** v0.1. Tracking: [AIR-374](https://linear.app/air-lock/issue/AIR-374). Tested against `bedrock-agentcore@^0.2.4` and `@anthropic-ai/claude-agent-sdk@^0.3.150`.
+> **Status:** v0.1. Tested against `bedrock-agentcore@^0.2.4` and `@anthropic-ai/claude-agent-sdk@^0.3.150`.
 
 ## Adapter
 
