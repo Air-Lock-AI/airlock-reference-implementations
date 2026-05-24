@@ -12,7 +12,7 @@ The adapter's output is a JSON object with `agentName`, `agentDefinition`, `mcpS
 
 ## Prerequisites
 
-- An Airlock organization with at least one agent. The walkthrough below uses the `triage` agent from RFC-011 §6.1 — paste the spec from the RFC into the Control Room agent editor, or substitute any agent name you already have.
+- An Airlock organization with at least one agent. The walkthrough below uses a `triage` agent as the worked example — substitute any agent name you already have configured in the Control Room.
 - AWS account with:
   - Bedrock model access enabled for Anthropic Claude Sonnet 4 (Console: Bedrock → Model access).
   - AgentCore Runtime available in your target region. Check the [AWS What's New page](https://aws.amazon.com/about-aws/whats-new/2026/04/amazon-bedrock-agentcore-runtime/) for the current region list.

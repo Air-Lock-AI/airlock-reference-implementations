@@ -1,6 +1,6 @@
 # airlock-reference-implementations
 
-Deployable reference implementations of [Airlock](https://air-lock.ai)-authored agents running on customer-owned hosts. Companion to **[RFC-011 — Portable Agents](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md)**.
+Deployable reference implementations of [Airlock](https://air-lock.ai)-authored agents running on customer-owned hosts.
 
 Each subdirectory is a self-contained, deploy-ready repo for one host runtime. They all share the same three load-bearing ideas; the rest is host glue.
 
@@ -19,7 +19,7 @@ Every reference implementation does the same three things. If you're writing one
 
 ### 1. Render the agent through the right adapter
 
-Airlock stores an agent as a portable `AgentSpec` ([RFC-011 §5.1](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md#51-data-model)). Before the host can run it, Airlock renders it into the host's native shape via an *adapter*:
+Airlock stores an agent as a portable `AgentSpec`. Before the host can run it, Airlock renders it into the host's native shape via an *adapter*:
 
 | Host | Adapter | Output shape |
 |---|---|---|
@@ -32,7 +32,7 @@ Get the rendered output via either:
 - **Runtime**: `GET https://api.air-lock.ai/v1/orgs/{slug}/agents/{name}/export?adapter={adapter}`
 - **MCP tool**: `export_agent` (org-wide MCP endpoint)
 
-Either way, the adapter returns a JSON object the host SDK can consume directly. **No string parsing.** The `content` field of the artifact is structured data on purpose ([adapter contract](https://github.com/Air-Lock-AI/airlock/blob/main/packages/agent-adapters/contract.ts)).
+Either way, the adapter returns a JSON object the host SDK can consume directly. **No string parsing.** The `content` field of the artifact is structured data on purpose.
 
 ### 2. Wire the per-invocation `agentInvocationId`
 
@@ -70,7 +70,7 @@ This is true for every host — only the noun "AgentCore Runtime" changes per ro
 | Budget enforcement | The model-access entitlement on your cloud |
 | Per-invocation MCP authentication | The infra-as-code, the bundling, the redeploy schedule |
 
-See [RFC-011 §6.4 — portability bounds](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md#64-same-agent-a-third-host-nobody-anticipated--and-what-limits-portable) for what each host can and can't express vs. the canonical `AgentSpec`.
+Some host runtimes can't express every field of the canonical `AgentSpec` — adapters lossy-render where they must, and stash the unrepresented bits in the `airlock` field of the output for round-trip fidelity.
 
 ---
 
@@ -102,7 +102,7 @@ The exported JSON **never contains secrets** — the `${AIRLOCK_TOKEN}` and `${A
 |---|---|
 | Deploy an Airlock agent on AWS, Node.js, dedicated runtime | [`agentcore/`](./agentcore) |
 | Build a reference impl for a host that's not listed yet | Copy the closest sibling, change only host-specific bits. PRs welcome. |
-| Understand the contract without deploying anything | Read this README, then [RFC-011](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md). |
+| Understand the contract without deploying anything | Read this README end-to-end — the three load-bearing ideas above are the whole contract. |
 
 ---
 
@@ -121,11 +121,8 @@ When in doubt, mirror the structure of [`agentcore/`](./agentcore). Open a PR; w
 
 ## Reference & further reading
 
-- Notion: [V1 MVP — agent portability](https://www.notion.so/28eb59c8985d839a999a81a33a9fcf95) (`Air-Lock-AI` workspace)
-- Notion: [V2 backlog](https://www.notion.so/364b59c8985d81f7b526c9a00a1945b8)
-- [RFC-011 — Portable agents](https://github.com/Air-Lock-AI/airlock/blob/main/docs/rfcs/RFC-011-portable-agents.md)
-- [Airlock adapter source](https://github.com/Air-Lock-AI/airlock/tree/main/packages/agent-adapters)
 - [Airlock Control Room](https://control-room.air-lock.ai)
+- [Airlock site](https://air-lock.ai)
 
 ---
 

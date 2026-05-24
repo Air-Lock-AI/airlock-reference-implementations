@@ -1,11 +1,10 @@
 /**
- * Shape of the `claude-sdk` adapter's `content` artifact (RFC-011 §5.5).
+ * Shape of the `claude-sdk` adapter's `content` artifact.
  *
  * `export_agent` returns this as a JSON object — not a string — so a
  * runtime-fetch consumer (this reference repo) parses it directly without
- * doing any string-eval of the adapter's output. The shape mirrors
- * `packages/agent-adapters/claude-sdk/index.ts` in the airlock repo; if the
- * adapter evolves, only this file changes.
+ * doing any string-eval of the adapter's output. If the adapter contract
+ * evolves on Airlock's side, only this file needs to change.
  */
 
 export interface ClaudeSdkAgentDefinition {
@@ -46,7 +45,7 @@ export interface ClaudeSdkAgentConfig {
  * Shape of `GET /v1/orgs/{slug}/agents/{name}/export?adapter=claude-sdk`.
  *
  * The REST endpoint mirrors `export_agent`'s MCP tool result. Both return an
- * artifact list per RFC §5.5; for `claude-sdk` the list is always length-1.
+ * artifact list; for `claude-sdk` the list is always length-1.
  */
 export interface ExportAgentResponse {
   agentName: string;
@@ -61,7 +60,7 @@ export interface ExportAgentResponse {
   ];
 }
 
-/** Header names — kept in sync with `packages/agent-adapters/mcp.ts`. */
+/** Header names — kept in sync with what the Airlock `claude-sdk` adapter emits. */
 export const AGENT_INVOCATION_HEADER = 'X-Airlock-Agent-Invocation-Id';
 export const AUTH_TOKEN_PLACEHOLDER = '${AIRLOCK_TOKEN}';
 export const AGENT_INVOCATION_PLACEHOLDER = '${AIRLOCK_AGENT_INVOCATION_ID}';

@@ -1,7 +1,7 @@
 /**
  * CDK stack: AgentCore Runtime + IAM role for the reference agent.
  *
- * Boundary (RFC-011 §6.4 portability bounds):
+ * Ownership boundary:
  *   - **You own:** this stack, the AgentCore Runtime, the IAM role, the
  *     Secrets Manager entry for the service token, and the CloudWatch
  *     observability surface for the runtime.

@@ -6,8 +6,8 @@
  *   - `${AIRLOCK_AGENT_INVOCATION_ID}` (per-invocation; a fresh UUID)
  *
  * Substitution is intentionally narrow: it only walks the `mcpServers[*].headers`
- * map. Any other appearance of `${...}` is left untouched. This is the same
- * contract the adapter documents in `packages/agent-adapters/mcp.ts`.
+ * map. Any other appearance of `${...}` is left untouched. This matches the
+ * substitution surface the Airlock adapter documents on its side.
  */
 
 import type { ClaudeSdkAgentConfig } from './types.ts';
