@@ -39,6 +39,17 @@ export async function* runAgent(
     // otherwise block all tool calls in this non-interactive server context.
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
+    // Disable all built-in tools (Read, Bash, Edit, ToolSearch, Task, ...).
+    // Tool execution belongs at the Airlock MCP boundary, not in the host.
+    tools: [],
+    // SDK isolation: don't load `~/.claude/settings.json`, project settings, or
+    // local settings. The deployed AgentCore Runtime has a clean container
+    // with no claude.ai login, so MCP servers can only come from `mcpServers`
+    // above; this option closes the equivalent leak on local smoke tests.
+    // (One residual local-only path remains: claude.ai remote-managed config
+    // — set `env: { CLAUDE_CONFIG_DIR: '/tmp/empty' }` if you need to suppress
+    // that too. Doesn't apply to the deployed runtime.)
+    settingSources: [],
   };
 
   try {
