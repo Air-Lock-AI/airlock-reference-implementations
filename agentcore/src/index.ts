@@ -3,14 +3,18 @@
  *
  * On cold start we:
  *   1. Read `AIRLOCK_SERVICE_TOKEN` from Secrets Manager (cached per process).
- *   2. Call Airlock's REST `export_agent?adapter=claude-sdk` for the configured
- *      agent (cached per process).
+ *   2. Call Airlock's `export_agent` MCP tool for the configured agent
+ *      (cached per process).
  *
  * On every invocation we:
  *   1. Generate a fresh `agentInvocationId` UUID.
  *   2. Substitute `${AIRLOCK_TOKEN}` and `${AIRLOCK_AGENT_INVOCATION_ID}` into
  *      the cached config.
  *   3. Drive `query()` from `@anthropic-ai/claude-agent-sdk`; yield SSE events.
+ *
+ * Cold-start fetch and tool calls share one channel and one credential — the
+ * service token authorizes both the `export_agent` MCP call here and the
+ * tool calls the loop issues afterwards through the same MCP URL.
  *
  * Trade-off vs. `build-time-export.ts`: cold start depends on Airlock being
  * reachable, but agent spec changes propagate to the deployed runtime within
@@ -27,16 +31,15 @@ import { runAgent } from './lib/run-agent.ts';
 import { getServiceToken } from './lib/service-token.ts';
 import type { ClaudeSdkAgentConfig } from './lib/types.ts';
 
-const orgSlug = requireEnv('AIRLOCK_ORG_SLUG');
+const mcpUrl = requireEnv('AIRLOCK_MCP_URL');
 const agentName = requireEnv('AIRLOCK_AGENT_NAME');
-const apiBaseUrl = process.env['AIRLOCK_API_BASE_URL'] ?? 'https://api.air-lock.ai';
 
 let cachedConfig: Promise<ClaudeSdkAgentConfig> | undefined;
 
 function getAgentConfig(): Promise<ClaudeSdkAgentConfig> {
   cachedConfig ??= (async () => {
     const serviceToken = await getServiceToken();
-    return fetchAgentConfig({ apiBaseUrl, orgSlug, agentName, serviceToken });
+    return fetchAgentConfig({ mcpUrl, agentName, serviceToken });
   })();
   return cachedConfig;
 }
@@ -63,7 +66,8 @@ const app = new BedrockAgentCoreApp({
   },
 });
 
-app.run();
+const port = process.env['PORT'] ? Number(process.env['PORT']) : undefined;
+app.run(port ? { port } : undefined);
 
 function requireEnv(name: string): string {
   const value = process.env[name];

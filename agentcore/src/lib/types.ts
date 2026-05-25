@@ -41,25 +41,6 @@ export interface ClaudeSdkAgentConfig {
   airlock: Record<string, unknown>;
 }
 
-/**
- * Shape of `GET /v1/orgs/{slug}/agents/{name}/export?adapter=claude-sdk`.
- *
- * The REST endpoint mirrors `export_agent`'s MCP tool result. Both return an
- * artifact list; for `claude-sdk` the list is always length-1.
- */
-export interface ExportAgentResponse {
-  agentName: string;
-  adapter: 'claude-sdk';
-  version: number;
-  artifacts: [
-    {
-      path: string;
-      op: 'write';
-      content: ClaudeSdkAgentConfig;
-    },
-  ];
-}
-
 /** Header names — kept in sync with what the Airlock `claude-sdk` adapter emits. */
 export const AGENT_INVOCATION_HEADER = 'X-Airlock-Agent-Invocation-Id';
 export const AUTH_TOKEN_PLACEHOLDER = '${AIRLOCK_TOKEN}';

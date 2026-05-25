@@ -48,7 +48,7 @@ Copy the returned `ARN` — you'll put it in `.env` next.
 
 ```bash
 cp .env.example .env
-# Edit: set AIRLOCK_ORG_SLUG, AIRLOCK_AGENT_NAME, AIRLOCK_TOKEN_SECRET_ARN, AWS_REGION.
+# Edit: set AIRLOCK_MCP_URL, AIRLOCK_AGENT_NAME, AIRLOCK_TOKEN_SECRET_ARN, AWS_REGION.
 ```
 
 For Pattern B (build-time export), also set `AIRLOCK_SERVICE_TOKEN` in `.env`, locally only. **Never commit that value.**
@@ -112,14 +112,18 @@ If the correlation id is missing, the agent isn't reaching Airlock's MCP endpoin
 Quick smoke test:
 
 ```bash
-AIRLOCK_ORG_SLUG=acme \
+AIRLOCK_MCP_URL=https://mcp.air-lock.ai/org/acme \
 AIRLOCK_AGENT_NAME=triage \
 AIRLOCK_SERVICE_TOKEN=svct_... \
 node --experimental-strip-types src/index.ts &
-curl -X POST http://localhost:8080/invocations \
+curl -N -X POST http://localhost:8080/invocations \
   -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream' \
+  -H "x-amzn-bedrock-agentcore-runtime-session-id: $(uuidgen)$(uuidgen)" \
   -d '{"prompt":"hello"}'
 ```
+
+Set `PORT=8090` (or any free port) if something is already bound to 8080 locally.
 
 ## Layout
 

@@ -1,13 +1,13 @@
 /**
  * Build-time export of an Airlock agent.
  *
- * Calls Airlock's REST `export_agent?adapter=claude-sdk` and writes the
- * resulting `ClaudeSdkAgentConfig` to `src/generated/agent.json`. The
+ * Calls Airlock's `export_agent` MCP tool and writes the resulting
+ * `ClaudeSdkAgentConfig` to `src/generated/agent.json`. The
  * `build-time-export.ts` entrypoint imports this file at bundle time.
  *
  * Reads env from `.env` (via `process.env`; no dotenv loader). Run as:
  *
- *   AIRLOCK_ORG_SLUG=acme \
+ *   AIRLOCK_MCP_URL=https://mcp.air-lock.ai/org/acme \
  *   AIRLOCK_AGENT_NAME=triage \
  *   AIRLOCK_SERVICE_TOKEN=svct_... \
  *   npm run export-agent
@@ -21,12 +21,11 @@ import { dirname, resolve } from 'node:path';
 
 import { fetchAgentConfig } from '../src/lib/airlock-client.ts';
 
-const orgSlug = requireEnv('AIRLOCK_ORG_SLUG');
+const mcpUrl = requireEnv('AIRLOCK_MCP_URL');
 const agentName = requireEnv('AIRLOCK_AGENT_NAME');
 const serviceToken = requireEnv('AIRLOCK_SERVICE_TOKEN');
-const apiBaseUrl = process.env['AIRLOCK_API_BASE_URL'] ?? 'https://api.air-lock.ai';
 
-const config = await fetchAgentConfig({ apiBaseUrl, orgSlug, agentName, serviceToken });
+const config = await fetchAgentConfig({ mcpUrl, agentName, serviceToken });
 
 const outPath = resolve(import.meta.dirname, '../src/generated/agent.json');
 await mkdir(dirname(outPath), { recursive: true });

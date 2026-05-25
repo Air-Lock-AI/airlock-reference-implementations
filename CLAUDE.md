@@ -14,7 +14,7 @@ When adding a new host, mirror the structure of `agentcore/` and only change hos
 
 These are the invariants the reference impls exist to demonstrate. Any change that weakens one of them is a bug, not a refactor:
 
-1. **Render the agent through the host's adapter.** Call Airlock's `GET /v1/orgs/{slug}/agents/{name}/export?adapter={adapter}` (or the `export_agent` MCP tool). The response's `artifacts[0].content` is structured JSON the host SDK consumes directly. **Never string-parse the adapter output.**
+1. **Render the agent through the host's adapter.** Call Airlock's `export_agent` MCP tool (`tools/call` with `arguments: { agent, adapter }`) against the org's MCP URL. The response's `artifacts[0].content` is structured JSON the host SDK consumes directly. **Never string-parse the adapter output.** Cold-start fetch and tool calls share one channel and one credential.
 2. **Wire `agentInvocationId` per invocation, never per process.** The adapter bakes `${AIRLOCK_TOKEN}` and `${AIRLOCK_AGENT_INVOCATION_ID}` into the MCP-server headers. The token is per-process; the invocation id MUST be a fresh UUID per loop run. Every MCP tool call within one loop must carry the same id — that's the audit-log correlation key.
 3. **The host runs the LLM loop; Airlock runs the tools.** All tool calls go through `https://mcp.air-lock.ai/org/{slug}` (the URL the adapter writes). Never instantiate a tool client locally, never replay a tool call, never cache a tool result.
 
@@ -42,7 +42,7 @@ npx vitest run tests/render-config.test.ts          # single test file
 npx vitest run -t "substitutes both placeholders"   # single test by name
 ```
 
-Required env for deploy (`agentcore/.env`, copy from `.env.example`): `AIRLOCK_ORG_SLUG`, `AIRLOCK_AGENT_NAME`, `AIRLOCK_TOKEN_SECRET_ARN`, `AWS_REGION`. For Pattern B also set `AIRLOCK_SERVICE_TOKEN` locally (never commit). The build-time-export entrypoint is selected via `AGENT_ENTRYPOINT=build-time-export.js` at deploy time.
+Required env for deploy (`agentcore/.env`, copy from `.env.example`): `AIRLOCK_MCP_URL` (e.g. `https://mcp.air-lock.ai/org/{slug}`), `AIRLOCK_AGENT_NAME`, `AIRLOCK_TOKEN_SECRET_ARN`, `AWS_REGION`. For Pattern B also set `AIRLOCK_SERVICE_TOKEN` locally (never commit). The build-time-export entrypoint is selected via `AGENT_ENTRYPOINT=build-time-export.js` at deploy time.
 
 ### Code map
 

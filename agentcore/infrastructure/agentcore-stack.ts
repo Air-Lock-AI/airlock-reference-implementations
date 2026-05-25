@@ -28,12 +28,10 @@ import type { Construct } from 'constructs';
 import { resolve } from 'node:path';
 
 export interface AgentCoreReferenceStackProps extends StackProps {
-  /** Airlock org slug, e.g. `acme`. */
-  orgSlug: string;
+  /** Airlock org MCP URL, e.g. `https://mcp.air-lock.ai/org/acme`. */
+  mcpUrl: string;
   /** Airlock agent name (must exist in the Control Room). */
   agentName: string;
-  /** Airlock REST API base URL (override only for self-hosted planes). */
-  apiBaseUrl: string;
   /** Secrets Manager ARN holding the Airlock service token (plain string). */
   serviceTokenSecretArn: string;
   /** Bundled entrypoint filename — `index.js` or `build-time-export.js`. */
@@ -96,7 +94,7 @@ export class AgentCoreReferenceStack extends Stack {
       type: 'AWS::BedrockAgentCore::Runtime',
       properties: {
         AgentRuntimeName: this.stackName.replaceAll('-', '_').slice(0, 47),
-        Description: `Airlock reference agent (${props.agentName} / ${props.orgSlug})`,
+        Description: `Airlock reference agent (${props.agentName} @ ${props.mcpUrl})`,
         RoleArn: role.roleArn,
         ProtocolConfiguration: 'HTTP',
         NetworkConfiguration: { NetworkMode: 'PUBLIC' },
@@ -113,9 +111,8 @@ export class AgentCoreReferenceStack extends Stack {
           },
         },
         EnvironmentVariables: {
-          AIRLOCK_ORG_SLUG: props.orgSlug,
+          AIRLOCK_MCP_URL: props.mcpUrl,
           AIRLOCK_AGENT_NAME: props.agentName,
-          AIRLOCK_API_BASE_URL: props.apiBaseUrl,
           AIRLOCK_TOKEN_SECRET_ARN: props.serviceTokenSecretArn,
         },
       },

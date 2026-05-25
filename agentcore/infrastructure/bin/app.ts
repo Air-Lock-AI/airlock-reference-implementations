@@ -9,9 +9,8 @@ const account = process.env['CDK_DEFAULT_ACCOUNT'];
 
 new AgentCoreReferenceStack(app, stackName, {
   env: { account, region },
-  orgSlug: requireEnv('AIRLOCK_ORG_SLUG'),
+  mcpUrl: requireEnv('AIRLOCK_MCP_URL'),
   agentName: requireEnv('AIRLOCK_AGENT_NAME'),
-  apiBaseUrl: process.env['AIRLOCK_API_BASE_URL'] ?? 'https://api.air-lock.ai',
   serviceTokenSecretArn: requireEnv('AIRLOCK_TOKEN_SECRET_ARN'),
   // Switch to `build-time-export.js` if you ran `npm run export-agent` first.
   entryPoint: process.env['AGENT_ENTRYPOINT'] ?? 'index.js',

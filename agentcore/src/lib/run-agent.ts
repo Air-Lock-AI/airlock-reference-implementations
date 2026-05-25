@@ -34,6 +34,11 @@ export async function* runAgent(
     systemPrompt: config.agentDefinition.prompt,
     mcpServers: config.mcpServers,
     allowedTools: config.agentDefinition.tools,
+    // Airlock is the policy boundary — every tool call goes through the MCP URL
+    // where policy/approval/audit run. The SDK's local permission gate would
+    // otherwise block all tool calls in this non-interactive server context.
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
   };
 
   try {

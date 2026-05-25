@@ -28,11 +28,9 @@ Airlock stores an agent as a portable `AgentSpec`. Before the host can run it, A
 | Vertex AE (Py) | `gemini` | Vertex `GenerativeModel` + function-calling config |
 | Cloud Run (Py) | `vercel` or `openai` | depends on which Python loop driver you pick |
 
-Get the rendered output via either:
-- **Runtime**: `GET https://api.air-lock.ai/v1/orgs/{slug}/agents/{name}/export?adapter={adapter}`
-- **MCP tool**: `export_agent` (org-wide MCP endpoint)
+Get the rendered output by calling the `export_agent` MCP tool on the org's MCP endpoint (`POST {mcpUrl}` with JSON-RPC `tools/call`, arguments `{ agent, adapter }`). The adapter returns a JSON object the host SDK can consume directly. **No string parsing.** The `content` field of the artifact is structured data on purpose.
 
-Either way, the adapter returns a JSON object the host SDK can consume directly. **No string parsing.** The `content` field of the artifact is structured data on purpose.
+One MCP URL, one service token, one channel: the same endpoint and credential handles cold-start config fetch *and* every per-invocation tool call.
 
 ### 2. Wire the per-invocation `agentInvocationId`
 
