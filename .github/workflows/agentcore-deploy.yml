@@ -30,9 +30,8 @@ jobs:
     environment: ${{ inputs.stage }}
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
-      AIRLOCK_ORG_SLUG: ${{ vars.AIRLOCK_ORG_SLUG }}
+      AIRLOCK_MCP_URL: ${{ vars.AIRLOCK_MCP_URL }}
       AIRLOCK_AGENT_NAME: ${{ vars.AIRLOCK_AGENT_NAME }}
-      AIRLOCK_API_BASE_URL: ${{ vars.AIRLOCK_API_BASE_URL }}
       AIRLOCK_TOKEN_SECRET_ARN: ${{ vars.AIRLOCK_TOKEN_SECRET_ARN }}
     steps:
       - uses: actions/checkout@v4
