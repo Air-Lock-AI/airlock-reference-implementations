@@ -103,7 +103,7 @@ export class AgentCoreReferenceStack extends Stack {
             Code: {
               S3: {
                 Bucket: asset.s3BucketName,
-                Key: asset.s3ObjectKey,
+                Prefix: asset.s3ObjectKey,
               },
             },
             EntryPoint: [props.entryPoint],
