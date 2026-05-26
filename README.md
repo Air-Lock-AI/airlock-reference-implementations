@@ -4,12 +4,17 @@ Deployable reference implementations of [Airlock](https://air-lock.ai)-authored 
 
 Each subdirectory is a self-contained, deploy-ready repo for one host runtime. They all share the same three load-bearing ideas; the rest is host glue.
 
-| Host | Subdir | Status | Language | Infra |
-|---|---|---|---|---|
-| **Amazon Bedrock AgentCore Runtime** | [`agentcore/`](./agentcore) | v0.1 | TypeScript / Node 22 | AWS CDK |
-| AWS Lambda + Function URL | `lambda/` | planned | TypeScript / Node 22 | AWS CDK |
-| Google Vertex AI Agent Engine | `vertex-ae/` | planned | Python | GCP CDK / Terraform |
-| Google Cloud Run | `cloud-run/` | planned | Python | Terraform |
+Airlock ships **seven adapter targets** end-to-end (`export_agent` renders an `AgentSpec` into each host's native shape). One reference impl per adapter is the target state for this repo; today only the `claude-sdk` row is deployable.
+
+| Adapter | Host runtime | Subdir | Status |
+|---|---|---|---|
+| `claude-sdk` | **Amazon Bedrock AgentCore Runtime** (TypeScript / Node 22, AWS CDK) | [`agentcore/`](./agentcore) | v0.1 |
+| `claude-code` | Claude Code CLI (install target, not a server deploy) | TBD | planned |
+| `openai` | OpenAI Agents SDK loop, host of your choice | TBD | planned |
+| `cursor` | Cursor IDE (install target, not a server deploy) | TBD | planned |
+| `bedrock` | AWS Bedrock Converse API, host of your choice | TBD | planned |
+| `gemini` | Google Gemini SDK loop, host of your choice | TBD | planned |
+| `vercel` | Vercel AI SDK loop, host of your choice | TBD | planned |
 
 ---
 
@@ -19,14 +24,7 @@ Every reference implementation does the same three things. If you're writing one
 
 ### 1. Render the agent through the right adapter
 
-Airlock stores an agent as a portable `AgentSpec`. Before the host can run it, Airlock renders it into the host's native shape via an *adapter*:
-
-| Host | Adapter | Output shape |
-|---|---|---|
-| AgentCore (Node) | `claude-sdk` | `{ agentName, agentDefinition, mcpServers, skills, airlock }` |
-| Lambda (Node) | `claude-sdk` | same |
-| Vertex AE (Py) | `gemini` | Vertex `GenerativeModel` + function-calling config |
-| Cloud Run (Py) | `vercel` or `openai` | depends on which Python loop driver you pick |
+Airlock stores an agent as a portable `AgentSpec`. Before the host can run it, Airlock renders it into the host's native shape via an *adapter*. Pick the adapter whose native shape your host SDK already understands — the seven shipped today are `claude-sdk`, `claude-code`, `openai`, `cursor`, `bedrock`, `gemini`, and `vercel`.
 
 Get the rendered output by calling the `export_agent` MCP tool on the org's MCP endpoint (`POST {mcpUrl}` with JSON-RPC `tools/call`, arguments `{ agent, adapter }`). The adapter returns a JSON object the host SDK can consume directly. **No string parsing.** The `content` field of the artifact is structured data on purpose.
 
@@ -106,7 +104,7 @@ The exported JSON **never contains secrets** — the `${AIRLOCK_TOKEN}` and `${A
 
 ## Contributing a new host
 
-Adding a host (e.g. `lambda/`, `vertex-ae/`) means writing one more reference impl that:
+Adding a host means writing one more reference impl — one of the six `TBD` rows above, or a new deployment target for an adapter already covered — that:
 
 1. Calls `export_agent` with the right adapter for its language/SDK
 2. Substitutes the two placeholders per invocation

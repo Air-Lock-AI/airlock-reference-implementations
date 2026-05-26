@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Multi-host monorepo of deploy-ready reference implementations for Airlock-authored agents running on customer-owned runtimes. Each top-level subdirectory is a self-contained, deploy-ready reference impl for one host runtime.
 
-Currently implemented: **`agentcore/`** (Amazon Bedrock AgentCore Runtime, TypeScript/Node 22, AWS CDK). The hosts listed as "planned" in the root `README.md` (`lambda/`, `vertex-ae/`, `cloud-run/`) do not yet exist as directories.
+Currently implemented: **`agentcore/`** (Amazon Bedrock AgentCore Runtime, TypeScript/Node 22, AWS CDK) — uses Airlock's `claude-sdk` adapter. The umbrella `README.md` lists six more `TBD` rows, one per remaining adapter (`claude-code`, `openai`, `cursor`, `bedrock`, `gemini`, `vercel`); none of those subdirectories exist yet.
 
-When adding a new host, mirror the structure of `agentcore/` and only change host-specific glue. See the umbrella `README.md` for the per-host adapter mapping.
+When adding a new host, mirror the structure of `agentcore/` and only change host-specific glue. See the umbrella `README.md` for the per-adapter mapping.
 
 ## The three load-bearing ideas (every host must implement these)
 
