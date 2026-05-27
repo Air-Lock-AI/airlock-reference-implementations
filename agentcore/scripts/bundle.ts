@@ -7,16 +7,37 @@
  * heavy lifting — bundle the entrypoint into a single CommonJS file, mark
  * `@aws-sdk/*` as external (the runtime provides them), and emit to `dist/`.
  *
- * `infrastructure/agentcore-stack.ts` then turns `dist/` into a CDK Asset and
- * uploads it to S3.
+ * One subtlety: `bedrock-agentcore` loads `@fastify/sse` and
+ * `@fastify/websocket` via `createRequire(import.meta.url)('...')`. That
+ * pattern bypasses esbuild's module registry — esbuild can't follow the
+ * call into the bundle, and at runtime the dynamic require lands on the
+ * real filesystem instead. Solution: keep those two packages external,
+ * declare them in `dist/package.json`, and `npm install` them (with
+ * transitives) into `dist/node_modules/` so the runtime's `createRequire`
+ * resolves them locally.
+ *
+ * `infrastructure/agentcore-stack.ts` then turns `dist/` into a CDK Asset
+ * and uploads it to S3.
  */
 
+import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { access, mkdir, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
+const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
 const outDir = resolve(root, 'dist');
+
+// These two packages are pulled in dynamically by `bedrock-agentcore` via
+// `createRequire`, so they have to land in dist/node_modules/ rather than
+// in the bundle itself. Versions follow the resolved versions in our
+// parent node_modules — keep them in lockstep with `bedrock-agentcore`.
+const runtimeRequires = ['@fastify/sse', '@fastify/websocket'];
+const runtimeDeps: Record<string, string> = Object.fromEntries(
+  runtimeRequires.map((name) => [name, require(`${name}/package.json`).version as string]),
+);
 
 await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
@@ -45,7 +66,9 @@ for (const entry of entrypoints) {
     format: 'cjs',
     sourcemap: true,
     // The AgentCore runtime provides the AWS SDK; bundling it bloats the zip.
-    external: ['@aws-sdk/*'],
+    // The two @fastify plugins are required at runtime via createRequire and
+    // can't be bundled; they ship in dist/node_modules/ instead.
+    external: ['@aws-sdk/*', ...runtimeRequires],
     // Shim `import.meta.url` for ESM-source deps bundled to CJS. Two
     // consumers care: `bedrock-agentcore` calls `createRequire(import.meta.url)`,
     // `@anthropic-ai/claude-agent-sdk` calls `fileURLToPath(import.meta.url)`.
@@ -59,10 +82,31 @@ for (const entry of entrypoints) {
   });
 }
 
-// AgentCore CodeZip needs a package.json so npm-style deps load cleanly.
+// AgentCore CodeZip needs a package.json so npm-style deps load cleanly. The
+// runtime-only deps go here so the next `npm install` picks them up; their
+// transitives come along automatically.
 await writeFile(
   resolve(outDir, 'package.json'),
-  `${JSON.stringify({ type: 'commonjs', main: 'index.js' }, null, 2)}\n`,
+  `${JSON.stringify(
+    {
+      type: 'commonjs',
+      main: 'index.js',
+      dependencies: runtimeDeps,
+    },
+    null,
+    2,
+  )}\n`,
+);
+
+// Materialize the externals into dist/node_modules/. `--no-package-lock`
+// keeps a fresh lockfile from being written into the zip; `--omit=dev`
+// keeps anything dev-only out; `--no-audit --no-fund` cuts noise and
+// network traffic during build.
+console.log('Installing runtime-only deps into dist/node_modules/…');
+execFileSync(
+  'npm',
+  ['install', '--omit=dev', '--no-package-lock', '--no-audit', '--no-fund'],
+  { cwd: outDir, stdio: 'inherit' },
 );
 
 console.log(`Bundled to ${outDir}`);
