@@ -80,12 +80,6 @@ export class AgentCoreReferenceStack extends Stack {
     // Pull the bundle out of the CDK staging bucket.
     asset.grantRead(role);
 
-    // 14-day log retention to keep dev costs predictable; tune for prod.
-    new logs.LogRetention(this, 'RuntimeLogRetention', {
-      logGroupName: `/aws/bedrock-agentcore/runtimes/${this.stackName}-DEFAULT`,
-      retention: logs.RetentionDays.TWO_WEEKS,
-    });
-
     // No L2 construct for AgentCore Runtime yet (as of May 2026) — use the
     // L1 CFN resource directly. AWS::BedrockAgentCore::Runtime supports both
     // ContainerConfiguration and CodeConfiguration; we use CodeConfiguration
@@ -119,6 +113,15 @@ export class AgentCoreReferenceStack extends Stack {
     });
     runtime.applyRemovalPolicy(RemovalPolicy.DESTROY);
     runtime.node.addDependency(role);
+
+    // 14-day log retention. AgentCore writes to a log group named after the
+    // runtime's auto-generated id (e.g. `<name>-<random-suffix>-DEFAULT`),
+    // not the stack name — reference `runtime.ref` so the retention policy
+    // lands on the actual log group. Tune for prod.
+    new logs.LogRetention(this, 'RuntimeLogRetention', {
+      logGroupName: `/aws/bedrock-agentcore/runtimes/${runtime.ref}-DEFAULT`,
+      retention: logs.RetentionDays.TWO_WEEKS,
+    });
 
     new CfnOutput(this, 'AgentRuntimeArn', {
       value: runtime.ref,
