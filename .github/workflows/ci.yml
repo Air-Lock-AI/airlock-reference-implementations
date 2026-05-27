@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - 'agentcore/**'
+      - '.github/workflows/ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'agentcore/**'
+      - '.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+
+# A new push to the same PR/branch supersedes any run still in flight —
+# cancelling the older run keeps feedback fresh and saves runner minutes
+# on rapid pushes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: agentcore
+
+jobs:
+  agentcore:
+    name: agentcore — typecheck + test + bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Defense in depth: don't persist GITHUB_TOKEN in `.git/config`
+          # since later steps (npm ci, bundle) don't need it.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agentcore/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # Bundle as a smoke check: the import.meta.url shim and asset shape
+      # have failure modes that only surface at bundle time, so we exercise
+      # the same path the deploy workflow does.
+      - run: npm run bundle
