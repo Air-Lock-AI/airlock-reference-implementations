@@ -4,15 +4,15 @@ Deployable reference implementations of [Airlock](https://air-lock.ai)-authored 
 
 Each subdirectory is a self-contained, deploy-ready repo for one host runtime. They all share the same three load-bearing ideas; the rest is host glue.
 
-Airlock ships **seven adapter targets** end-to-end (`export_agent` renders an `AgentSpec` into each host's native shape). One reference impl per adapter is the target state for this repo; today only the `claude-sdk` row is deployable.
+Airlock ships **seven adapter targets** end-to-end (`export_agent` renders an `AgentSpec` into each host's native shape). One reference impl per adapter is the target state for this repo; today only the `bedrock` row is deployable.
 
 | Adapter | Host runtime | Subdir | Status |
 |---|---|---|---|
-| `claude-sdk` | **Amazon Bedrock AgentCore Runtime** (TypeScript / Node 22, AWS CDK) | [`agentcore/`](./agentcore) | v0.1 |
+| `bedrock` | **Amazon Bedrock AgentCore Runtime** (TypeScript / Node 22, AWS CDK) | [`agentcore/`](./agentcore) | v0.2 |
+| `claude-sdk` | Claude Agent SDK loop, host of your choice | TBD | planned |
 | `claude-code` | Claude Code CLI (install target, not a server deploy) | TBD | planned |
 | `openai` | OpenAI Agents SDK loop, host of your choice | TBD | planned |
 | `cursor` | Cursor IDE (install target, not a server deploy) | TBD | planned |
-| `bedrock` | AWS Bedrock Converse API, host of your choice | TBD | planned |
 | `gemini` | Google Gemini SDK loop, host of your choice | TBD | planned |
 | `vercel` | Vercel AI SDK loop, host of your choice | TBD | planned |
 

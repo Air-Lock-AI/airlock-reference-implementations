@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Multi-host monorepo of deploy-ready reference implementations for Airlock-authored agents running on customer-owned runtimes. Each top-level subdirectory is a self-contained, deploy-ready reference impl for one host runtime.
 
-Currently implemented: **`agentcore/`** (Amazon Bedrock AgentCore Runtime, TypeScript/Node 22, AWS CDK) — uses Airlock's `claude-sdk` adapter. The umbrella `README.md` lists six more `TBD` rows, one per remaining adapter (`claude-code`, `openai`, `cursor`, `bedrock`, `gemini`, `vercel`); none of those subdirectories exist yet.
+Currently implemented: **`agentcore/`** (Amazon Bedrock AgentCore Runtime, TypeScript/Node 22, AWS CDK) — uses Airlock's `bedrock` adapter and drives Bedrock's Converse API directly. The umbrella `README.md` lists six more `TBD` rows, one per remaining adapter (`claude-sdk`, `claude-code`, `openai`, `cursor`, `gemini`, `vercel`); none of those subdirectories exist yet.
 
 When adding a new host, mirror the structure of `agentcore/` and only change host-specific glue. See the umbrella `README.md` for the per-adapter mapping.
 
@@ -46,15 +46,16 @@ Required env for deploy (`agentcore/.env`, copy from `.env.example`): `AIRLOCK_M
 
 ### Code map
 
-- `src/index.ts` — Pattern A entrypoint. Caches `getAgentConfig()` and `getServiceToken()` per process; generates a fresh `agentInvocationId` UUID per invocation; renders config; drives `runAgent`.
-- `src/build-time-export.ts` — Pattern B entrypoint. Imports `./generated/agent.json` at bundle time; otherwise identical to `index.ts`.
-- `src/lib/types.ts` — Mirror of the `claude-sdk` adapter's output shape (`ClaudeSdkAgentConfig`). The single source of truth for the adapter contract; if Airlock's adapter evolves, only this file changes.
-- `src/lib/airlock-client.ts` — `fetchAgentConfig()` against the REST export endpoint. **No retries by design** — a failed cold-start fetch should fail loud, not paper over with stale data.
-- `src/lib/render-config.ts` — Placeholder substitution. Intentionally narrow: only walks `mcpServers[*].headers`. Returns a shallow copy; never mutates the cached config.
+- `src/index.ts` — Pattern A entrypoint. On cold start: fetches the agent via `export_agent` (adapter=`bedrock`), then **hydrates** each `toolSpec.inputSchema` via `describe_tools` (Converse requires schemas). Caches the hydrated config + service token per process; generates a fresh `agentInvocationId` UUID per invocation; renders headers; drives `runAgent`.
+- `src/build-time-export.ts` — Pattern B entrypoint. Imports the pre-hydrated `./generated/agent.json` at bundle time; runs offline (no cold-start MCP calls). Otherwise identical to `index.ts`.
+- `src/lib/types.ts` — Mirror of the `bedrock` adapter's output shape (`BedrockAgentConfig`). The single source of truth for the adapter contract; if Airlock's adapter evolves, only this file changes.
+- `src/lib/airlock-client.ts` — `fetchAgentConfig()` calls `export_agent` over MCP with adapter=`bedrock`. **No retries by design** — a failed cold-start fetch should fail loud, not paper over with stale data.
+- `src/lib/mcp-client.ts` — JSON-RPC `tools/call` helper + thin `describeTools` / `executeTool` wrappers. Three call sites (cold-start fetch, cold-start hydration, in-loop tool dispatch) share this plumbing.
+- `src/lib/render-config.ts` — Placeholder substitution. Intentionally narrow: only walks `airlockMcp.headers`. Returns a shallow copy; never mutates the cached config.
 - `src/lib/service-token.ts` — Resolves the service token from `AIRLOCK_SERVICE_TOKEN` env var (local dev) or `AIRLOCK_TOKEN_SECRET_ARN` Secrets Manager. Cached per process.
-- `src/lib/run-agent.ts` — Drives `@anthropic-ai/claude-agent-sdk`'s `query()`, translates assistant/tool/result messages into AgentCore SSE events (`message`, `tool_use`, `result`, `error`).
-- `scripts/bundle.ts` — esbuild → `dist/`. Marks `@aws-sdk/*` as external (AgentCore Runtime provides them). Conditionally bundles `build-time-export.ts` only if `src/generated/agent.json` exists.
-- `scripts/export-agent.ts` — Build-time export script for Pattern B.
+- `src/lib/run-agent.ts` — Drives Bedrock's `ConverseStreamCommand` loop. On `stopReason: tool_use` it resolves the alias via `airlockMcp.toolAliases`, POSTs `execute_tool` to MCP, feeds the result back as a Converse `toolResult` content block, and repeats until `end_turn`. Surfaces MCP error bodies in `toolResult.error` so the model can self-correct. Applies the cross-region inference-profile prefix (`us.` / `eu.` / `apac.` / `global.`) to the model id based on `AWS_REGION`. Translates Converse stream events into AgentCore SSE (`message`, `tool_use`, `tool_result`, `result`, `error`).
+- `scripts/bundle.ts` — esbuild → `dist/`. Marks `@aws-sdk/*` as external (AgentCore Runtime provides them). Injects an `import.meta.url` shim via banner so ESM-source deps bundled to CJS still resolve. Conditionally bundles `build-time-export.ts` only if `src/generated/agent.json` exists.
+- `scripts/export-agent.ts` — Build-time export script for Pattern B. Calls both `export_agent` AND `describe_tools` so the written `agent.json` is fully hydrated.
 - `infrastructure/agentcore-stack.ts` — CDK stack. Uses the L1 `AWS::BedrockAgentCore::Runtime` CFN resource (no L2 construct exists in `aws-cdk-lib@^2.257.0`). IAM scoped to `bedrock:InvokeModel*`, the single secret ARN, and the runtime's CloudWatch log group.
 - `infrastructure/bin/app.ts` — CDK app entry; `AGENT_ENTRYPOINT` env var selects Pattern A vs B.
 - `.github/workflows/agentcore-deploy.yml` — `workflow_dispatch` deploy with `stage` (environment) and `pattern` (`runtime-fetch` / `build-time-export`) inputs.

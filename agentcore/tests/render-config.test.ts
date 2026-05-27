@@ -1,103 +1,74 @@
 import { describe, expect, it } from 'vitest';
 
 import { renderConfig } from '../src/lib/render-config.ts';
-import type { ClaudeSdkAgentConfig } from '../src/lib/types.ts';
+import type { BedrockAgentConfig } from '../src/lib/types.ts';
 
-const fixture: ClaudeSdkAgentConfig = {
-  agentName: 'triage',
-  agentDefinition: {
-    description: 'Triage incoming GitHub issues',
-    prompt: 'You are a triage agent.',
-    tools: ['github/create_issue'],
-    model: 'claude-sonnet-4-6',
-  },
-  mcpServers: {
-    'airlock-acme': {
-      type: 'http',
-      url: 'https://mcp.air-lock.ai/org/acme',
+function makeFixture(): BedrockAgentConfig {
+  return {
+    converse: {
+      modelId: 'anthropic.claude-haiku-4-5-20251001-v1:0',
+      system: [{ text: 'You are a triage agent.' }],
+      toolConfig: {
+        tools: [{ toolSpec: { name: 'github_create_issue' } }],
+      },
+      inferenceConfig: { maxTokens: 4000 },
+    },
+    airlockMcp: {
+      endpoint: 'https://mcp.air-lock.ai/org/acme',
+      transport: 'streamable-http',
       headers: {
         Authorization: 'Bearer ${AIRLOCK_TOKEN}',
         'X-Airlock-Agent-Invocation-Id': '${AIRLOCK_AGENT_INVOCATION_ID}',
       },
+      toolAliases: { github_create_issue: 'github/create_issue' },
     },
-  },
-  skills: ['skl_01HZ'],
-  airlock: { schemaVersion: '1.0' },
-};
+    skills: ['skl_01HZ'],
+    airlock: { schemaVersion: '1.0' },
+  };
+}
 
 describe('renderConfig', () => {
-  it('substitutes both placeholders in mcpServers headers', () => {
-    const rendered = renderConfig(fixture, {
+  it('substitutes both placeholders in airlockMcp.headers', () => {
+    const rendered = renderConfig(makeFixture(), {
       serviceToken: 'svct_secret',
       agentInvocationId: 'inv-uuid-123',
     });
 
-    expect(rendered.mcpServers['airlock-acme']?.headers).toEqual({
+    expect(rendered.airlockMcp.headers).toEqual({
       Authorization: 'Bearer svct_secret',
       'X-Airlock-Agent-Invocation-Id': 'inv-uuid-123',
     });
   });
 
   it('does not mutate the original config', () => {
+    const fixture = makeFixture();
     renderConfig(fixture, { serviceToken: 't', agentInvocationId: 'i' });
 
-    expect(fixture.mcpServers['airlock-acme']?.headers['Authorization']).toBe(
-      'Bearer ${AIRLOCK_TOKEN}',
+    expect(fixture.airlockMcp.headers['Authorization']).toBe('Bearer ${AIRLOCK_TOKEN}');
+    expect(fixture.airlockMcp.headers['X-Airlock-Agent-Invocation-Id']).toBe(
+      '${AIRLOCK_AGENT_INVOCATION_ID}',
     );
-    expect(
-      fixture.mcpServers['airlock-acme']?.headers['X-Airlock-Agent-Invocation-Id'],
-    ).toBe('${AIRLOCK_AGENT_INVOCATION_ID}');
   });
 
   it('leaves the rest of the config untouched', () => {
+    const fixture = makeFixture();
     const rendered = renderConfig(fixture, {
       serviceToken: 't',
       agentInvocationId: 'i',
     });
 
-    expect(rendered.agentDefinition).toEqual(fixture.agentDefinition);
+    expect(rendered.converse).toEqual(fixture.converse);
     expect(rendered.skills).toEqual(fixture.skills);
-    expect(rendered.agentName).toBe(fixture.agentName);
-  });
-
-  it('handles multiple mcp servers', () => {
-    const multi: ClaudeSdkAgentConfig = {
-      ...fixture,
-      mcpServers: {
-        'airlock-acme': fixture.mcpServers['airlock-acme']!,
-        'airlock-other': {
-          type: 'http',
-          url: 'https://mcp.air-lock.ai/org/other',
-          headers: { Authorization: 'Bearer ${AIRLOCK_TOKEN}' },
-        },
-      },
-    };
-
-    const rendered = renderConfig(multi, {
-      serviceToken: 'tok',
-      agentInvocationId: 'inv',
-    });
-
-    expect(rendered.mcpServers['airlock-other']?.headers['Authorization']).toBe('Bearer tok');
+    expect(rendered.airlockMcp.endpoint).toBe(fixture.airlockMcp.endpoint);
+    expect(rendered.airlockMcp.toolAliases).toEqual(fixture.airlockMcp.toolAliases);
   });
 
   it('leaves unrelated ${...} expressions untouched', () => {
-    const odd: ClaudeSdkAgentConfig = {
-      ...fixture,
-      mcpServers: {
-        'airlock-acme': {
-          type: 'http',
-          url: 'https://mcp.air-lock.ai/org/acme',
-          headers: {
-            'X-Custom': '${SOMETHING_ELSE}',
-            Authorization: 'Bearer ${AIRLOCK_TOKEN}',
-          },
-        },
-      },
-    };
+    const fixture = makeFixture();
+    fixture.airlockMcp.headers['X-Custom'] = '${SOMETHING_ELSE}';
 
-    const rendered = renderConfig(odd, { serviceToken: 't', agentInvocationId: 'i' });
-    expect(rendered.mcpServers['airlock-acme']?.headers['X-Custom']).toBe('${SOMETHING_ELSE}');
-    expect(rendered.mcpServers['airlock-acme']?.headers['Authorization']).toBe('Bearer t');
+    const rendered = renderConfig(fixture, { serviceToken: 't', agentInvocationId: 'i' });
+    expect(rendered.airlockMcp.headers['X-Custom']).toBe('${SOMETHING_ELSE}');
+    expect(rendered.airlockMcp.headers['Authorization']).toBe('Bearer t');
   });
 });

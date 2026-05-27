@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AirlockExportError, fetchAgentConfig } from '../src/lib/airlock-client.ts';
-import type { ClaudeSdkAgentConfig } from '../src/lib/types.ts';
+import type { BedrockAgentConfig } from '../src/lib/types.ts';
 
 const baseArgs = {
   mcpUrl: 'https://mcp.air-lock.ai/org/acme',
@@ -9,15 +9,19 @@ const baseArgs = {
   serviceToken: 'svct_test',
 };
 
-const renderedContent: ClaudeSdkAgentConfig = {
-  agentName: 'triage',
-  agentDefinition: {
-    description: 'd',
-    prompt: 'p',
-    tools: [],
-    model: 'claude-sonnet-4-6',
+const renderedContent: BedrockAgentConfig = {
+  converse: {
+    modelId: 'anthropic.claude-haiku-4-5-20251001-v1:0',
+    system: [{ text: 'system' }],
+    toolConfig: { tools: [] },
+    inferenceConfig: { maxTokens: 4000 },
   },
-  mcpServers: {},
+  airlockMcp: {
+    endpoint: 'https://mcp.air-lock.ai/org/acme',
+    transport: 'streamable-http',
+    headers: { Authorization: 'Bearer ${AIRLOCK_TOKEN}' },
+    toolAliases: {},
+  },
   skills: [],
   airlock: {},
 };
@@ -47,12 +51,12 @@ describe('fetchAgentConfig (MCP)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('issues tools/call against the MCP URL and returns artifact content', async () => {
+  it('issues tools/call against the MCP URL with adapter=bedrock', async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       mcpToolsCallReply({
-        format: 'claude-sdk',
+        format: 'bedrock',
         artifacts: [
-          { path: '.claude/agents/triage.json', op: 'write', content: renderedContent },
+          { path: '.bedrock/agents/triage.json', op: 'write', content: renderedContent },
         ],
       }),
     );
@@ -73,7 +77,7 @@ describe('fetchAgentConfig (MCP)', () => {
     expect(body).toMatchObject({
       jsonrpc: '2.0',
       method: 'tools/call',
-      params: { name: 'export_agent', arguments: { agent: 'triage', adapter: 'claude-sdk' } },
+      params: { name: 'export_agent', arguments: { agent: 'triage', adapter: 'bedrock' } },
     });
   });
 
@@ -87,7 +91,7 @@ describe('fetchAgentConfig (MCP)', () => {
     } as Response);
 
     await expect(fetchAgentConfig(baseArgs)).rejects.toMatchObject({
-      name: 'AirlockExportError',
+      name: 'McpCallError',
       status: 401,
     });
   });
@@ -129,7 +133,7 @@ describe('fetchAgentConfig (MCP)', () => {
 
   it('throws AirlockExportError when artifacts is empty', async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-      mcpToolsCallReply({ format: 'claude-sdk', artifacts: [] }),
+      mcpToolsCallReply({ format: 'bedrock', artifacts: [] }),
     );
 
     await expect(fetchAgentConfig(baseArgs)).rejects.toBeInstanceOf(AirlockExportError);
