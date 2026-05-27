@@ -46,6 +46,15 @@ for (const entry of entrypoints) {
     sourcemap: true,
     // The AgentCore runtime provides the AWS SDK; bundling it bloats the zip.
     external: ['@aws-sdk/*'],
+    // Shim `import.meta.url` for ESM-source deps bundled to CJS. Two
+    // consumers care: `bedrock-agentcore` calls `createRequire(import.meta.url)`,
+    // `@anthropic-ai/claude-agent-sdk` calls `fileURLToPath(import.meta.url)`.
+    // The latter rejects bare paths, so we hand both a proper `file://` URL
+    // computed once per module via a banner.
+    banner: {
+      js: 'const __importMetaUrl = require("url").pathToFileURL(__filename).href;',
+    },
+    define: { 'import.meta.url': '__importMetaUrl' },
     logLevel: 'info',
   });
 }
