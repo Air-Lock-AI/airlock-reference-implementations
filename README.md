@@ -76,14 +76,14 @@ Each subdir ships both. Pick one per environment — same code path, different s
 
 ### Pattern A — Runtime fetch (default)
 
-The deployed runtime calls Airlock's REST `export_agent` on cold start, caches the rendered config in module scope, and substitutes placeholders per invocation.
+The deployed runtime calls Airlock's `export_agent` MCP tool (JSON-RPC `tools/call` against the org's MCP endpoint) on cold start, caches the rendered config in module scope, and substitutes placeholders per invocation. Same endpoint, same service token, same channel as the per-invocation tool calls — no separate management API.
 
 - **Pro:** Control-Room edits to the agent reach the deployed runtime within one cold-start cycle. No redeploy.
 - **Con:** Cold start depends on Airlock being reachable. Failures are loud (visible in cloud logs) rather than silently serving stale state — by design.
 
 ### Pattern B — Build-time export
 
-CI calls `export_agent` before bundling, writes the rendered config to a generated file, and bakes it into the deployment artifact. The runtime never touches Airlock's REST API.
+CI calls the `export_agent` MCP tool before bundling, writes the rendered config to a generated file, and bakes it into the deployment artifact. The runtime never touches Airlock at cold start.
 
 - **Pro:** No cold-start dependency on Airlock. Air-gappable. Deterministic.
 - **Con:** Every Control-Room agent edit requires a redeploy.
