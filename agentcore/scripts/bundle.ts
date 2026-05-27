@@ -4,8 +4,13 @@
  *
  * AgentCore CodeZip wants a flat zip with a single entry point file (named in
  * `CodeConfiguration.EntryPoint`) plus its dependencies. esbuild does the
- * heavy lifting — bundle the entrypoint into a single CommonJS file, mark
- * `@aws-sdk/*` as external (the runtime provides them), and emit to `dist/`.
+ * heavy lifting — bundle the entrypoint into a single CommonJS file and
+ * emit it to `dist/`.
+ *
+ * What we do NOT mark as external:
+ *   - `@aws-sdk/*` — despite the AWS Lambda convention, the AgentCore
+ *     Runtime container does not ship the SDK on its image. Bundling it
+ *     adds ~10MB, but nothing else makes the SDK available at runtime.
  *
  * One subtlety: `bedrock-agentcore` loads `@fastify/sse` and
  * `@fastify/websocket` via `createRequire(import.meta.url)('...')`. That
@@ -65,10 +70,11 @@ for (const entry of entrypoints) {
     target: 'node22',
     format: 'cjs',
     sourcemap: true,
-    // The AgentCore runtime provides the AWS SDK; bundling it bloats the zip.
     // The two @fastify plugins are required at runtime via createRequire and
-    // can't be bundled; they ship in dist/node_modules/ instead.
-    external: ['@aws-sdk/*', ...runtimeRequires],
+    // can't be bundled — they ship in dist/node_modules/ instead. Everything
+    // else (including the AWS SDK, which the runtime container doesn't
+    // ship) goes into the bundle.
+    external: runtimeRequires,
     // Shim `import.meta.url` for ESM-source deps bundled to CJS. Two
     // consumers care: `bedrock-agentcore` calls `createRequire(import.meta.url)`,
     // `@anthropic-ai/claude-agent-sdk` calls `fileURLToPath(import.meta.url)`.
