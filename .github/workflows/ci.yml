@@ -1,15 +1,15 @@
 name: CI
 
 on:
+  # NOTE: intentionally NO `paths:` filter on these triggers. The `agentcore`
+  # job below is a *required* status check on `main`. A required check that is
+  # filtered off the trigger never reports for PRs outside the filter, leaving
+  # them stuck at "Expected — waiting for status" and unmergeable forever (this
+  # bit PR #6, a docs-only change). The path filter lives *inside* the job
+  # instead — see the change-detection step. DO NOT re-add `paths:` here.
   pull_request:
-    paths:
-      - 'agentcore/**'
-      - '.github/workflows/ci.yml'
   push:
     branches: [main]
-    paths:
-      - 'agentcore/**'
-      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
@@ -26,6 +26,12 @@ defaults:
     working-directory: agentcore
 
 jobs:
+  # REQUIRED status check on `main` (branch protection matches it by name).
+  # Runs on EVERY pull request so the check always reports; the agentcore path
+  # filter is applied inside the job. PRs that don't touch agentcore/ report
+  # this check as a fast pass; PRs that do run the full typecheck + test +
+  # bundle. The name MUST stay exactly "agentcore — typecheck + test + bundle"
+  # so branch protection keeps matching it.
   agentcore:
     name: agentcore — typecheck + test + bundle
     runs-on: ubuntu-latest
@@ -35,20 +41,63 @@ jobs:
           # Defense in depth: don't persist GITHUB_TOKEN in `.git/config`
           # since later steps (npm ci, bundle) don't need it.
           persist-credentials: false
+          # Full history so the change-detection step can diff base..head.
+          fetch-depth: 0
+
+      - name: Detect agentcore changes
+        id: changes
+        working-directory: ${{ github.workspace }}
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_AFTER"
+          fi
+          # Fail safe toward running the full build: if the base commit is
+          # missing or unusable (initial all-zeros SHA, or a force-pushed /
+          # fork ref whose object wasn't fetched), treat everything as changed
+          # rather than erroring or falsely skipping the build.
+          if [ -z "$base" ] \
+            || [ "$base" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            changed="__unresolved__/run-everything"
+          else
+            changed=$(git diff --name-only "$base" "$head" 2>/dev/null) || changed="__unresolved__/run-everything"
+          fi
+          printf 'Changed files:\n%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -Eq '^(agentcore/|__unresolved__/|\.github/workflows/ci\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "agentcore touched (or undetermined) — running the full check."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under agentcore/ — required check passes without building."
+          fi
 
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.run == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: agentcore/package-lock.json
 
-      - run: npm ci
+      - if: steps.changes.outputs.run == 'true'
+        run: npm ci
 
-      - run: npm run typecheck
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run typecheck
 
-      - run: npm test
+      - if: steps.changes.outputs.run == 'true'
+        run: npm test
 
       # Bundle as a smoke check: the import.meta.url shim and asset shape
       # have failure modes that only surface at bundle time, so we exercise
       # the same path the deploy workflow does.
-      - run: npm run bundle
+      - if: steps.changes.outputs.run == 'true'
+        run: npm run bundle
