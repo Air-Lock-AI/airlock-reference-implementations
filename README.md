@@ -79,7 +79,7 @@ render at all. Here's the field-by-field contract:
 
 | `AgentSpec` field | What the host must provide | If the host can't |
 |---|---|---|
-| **System prompt** | An instructions / system-message slot. | No real risk — every LLM host has one. |
+| **System prompt** | An instruction / system-message slot. | No real risk — every LLM host has one. |
 | **Tools / toolset** | An MCP client integration *and* a way to restrict the agent to that tool list. | If the host speaks MCP but has no per-agent allowlist, the agent can see every tool the host's MCP integration exposes — a wider blast radius than the spec declared. The adapter flags this at install time. |
 | **Model preference** | The ability to pin a model family / tier. | If the host locks the model (e.g. a product that always uses its own), the adapter walks down the preference list and renders to whatever the host uses. The agent runs, but maybe not on the author's first-choice model. Documented, not failed. |
 | **Skills** | A way to call a tool at runtime (skills load via a normal MCP call, never inlined into the prompt). | Any MCP-speaking host has this by definition. |
