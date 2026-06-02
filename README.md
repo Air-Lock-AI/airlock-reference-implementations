@@ -66,7 +66,36 @@ This is true for every host — only the noun "AgentCore Runtime" changes per ro
 | Budget enforcement | The model-access entitlement on your cloud |
 | Per-invocation MCP authentication | The infra-as-code, the bundling, the redeploy schedule |
 
-Some host runtimes can't express every field of the canonical `AgentSpec` — adapters lossy-render where they must, and stash the unrepresented bits in the `airlock` field of the output for round-trip fidelity.
+---
+
+## What travels — and where portability stops
+
+The whole point of the canonical `AgentSpec` is that one agent definition runs on
+any host with an adapter. But portability is bounded by what each host's native
+config can actually express. An adapter renders *honestly*: where a host can't
+represent a field, it either degrades and says so in the export's install
+instructions, or — when the gap would silently break governance — refuses to
+render at all. Here's the field-by-field contract:
+
+| `AgentSpec` field | What the host must provide | If the host can't |
+|---|---|---|
+| **System prompt** | An instructions / system-message slot. | No real risk — every LLM host has one. |
+| **Tools / toolset** | An MCP client integration *and* a way to restrict the agent to that tool list. | If the host speaks MCP but has no per-agent allowlist, the agent can see every tool the host's MCP integration exposes — a wider blast radius than the spec declared. The adapter flags this at install time. |
+| **Model preference** | The ability to pin a model family / tier. | If the host locks the model (e.g. a product that always uses its own), the adapter walks down the preference list and renders to whatever the host uses. The agent runs, but maybe not on the author's first-choice model. Documented, not failed. |
+| **Skills** | A way to call a tool at runtime (skills load via a normal MCP call, never inlined into the prompt). | Any MCP-speaking host has this by definition. |
+| **Budget** | A per-loop token / turn cap. | Many hosts have no equivalent. The value rides along as a hint; Airlock's per-tool and per-project budgets stay the enforced spend cap regardless. |
+| **Approval handling** | Long-running tool-call support (the host must be able to suspend a call, wait for an approval, and resume). | A host without it can't run an agent whose tools hit an approval policy — the call would dead-end. The adapter refuses to render that agent and tells you why, rather than failing silently at runtime. |
+
+Adapters lossy-render where they must, and stash the unrepresented bits in the
+`airlock` field of the output for round-trip fidelity.
+
+Two of these are governance-critical and worth restating: the host runs the LLM
+loop, so **per-loop token caps are guidance, not enforcement** — Airlock enforces
+spend at the tool and project layer. And **any tools the host adds locally**
+(file-system, shell, in-editor) **bypass Airlock entirely**. Adapters emit a
+"tools only via Airlock" config by default; if you opt out, those local tools are
+outside the governed boundary, and the audit log only ever reflects what crossed
+the Airlock endpoint.
 
 ---
 
@@ -87,6 +116,32 @@ CI calls the `export_agent` MCP tool before bundling, writes the rendered config
 
 - **Pro:** No cold-start dependency on Airlock. Air-gappable. Deterministic.
 - **Con:** Every Control-Room agent edit requires a redeploy.
+
+### Choosing between them
+
+Both patterns share the exact same code path and the same per-invocation
+governance — the only difference is *when* the agent config is fetched. Pick by
+how your environment answers these:
+
+| If you… | Use |
+|---|---|
+| Want Control-Room edits to reach the runtime without a redeploy | **A — Runtime fetch** |
+| Edit the agent definition often during development | **A — Runtime fetch** |
+| Run air-gapped, or can't have Airlock be a cold-start dependency | **B — Build-time export** |
+| Need deterministic, reproducible artifacts (pinned config for compliance / rollback) | **B — Build-time export** |
+| Cold-start frequently and are latency-sensitive (scale-to-zero, bursty traffic) | **B** — avoids the cold-start round-trip to Airlock |
+| Want the fewest moving parts in CI (no generated files in the artifact) | **A — Runtime fetch** |
+
+Operationally: Pattern A adds one MCP round-trip to **cold start only** — the
+rendered config is cached in module scope, so steady-state invocations on a warm
+container pay nothing extra. If that cold-start fetch fails, it fails loud (in
+your cloud logs) rather than serving stale config — by design. Pattern B moves
+that fetch to CI, so the runtime never depends on Airlock being reachable, at the
+cost of a redeploy for every agent edit.
+
+When unsure, start with **A** — it's the default, has fewer build steps, and keeps
+the agent definition as a single source of truth. Move to **B** when you have a
+concrete reason from the table above.
 
 The exported JSON **never contains secrets** — the `${AIRLOCK_TOKEN}` and `${AIRLOCK_AGENT_INVOCATION_ID}` placeholders the adapter emits stay as placeholders on disk under both patterns. They're substituted at invocation time, always.
 
